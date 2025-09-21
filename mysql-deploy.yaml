@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: mysql
+  labels:
+    app: mysql
+    tier: database
 spec:
   replicas: 1
   selector:
@@ -11,28 +14,112 @@ spec:
     metadata:
       labels:
         app: mysql
+        tier: database
     spec:
       containers:
         - name: mysql
           image: mysql:8.0
           ports:
             - containerPort: 3306
+              name: mysql-port
           env:
             - name: MYSQL_ALLOW_EMPTY_PASSWORD
               value: "yes"
-            - name: MYSQL_DATABASE
-              value: "database"
             - name: MYSQL_ROOT_HOST
               value: "%"
+            - name: MYSQL_ROOT_PASSWORD
+              value: ""
+          args:
+            - --default-authentication-plugin=mysql_native_password
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_unicode_ci
+            - --sql-mode=STRICT_TRANS_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql
+            - name: mysql-init-script
+              mountPath: /docker-entrypoint-initdb.d
+          readinessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - mysqladmin
+                - ping
+                - -h
+                - localhost
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+      volumes:
+        - name: mysql-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-pvc
+        - name: mysql-init-script
+          configMap:
+            name: mysql-init-config
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: mysql
+  labels:
+    app: mysql
+    tier: database
 spec:
   selector:
     app: mysql
   ports:
     - port: 3306
       targetPort: 3306
+      name: mysql-port
   type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-pvc
+  labels:
+    app: mysql
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mysql-init-config
+  labels:
+    app: mysql
+data:
+  init.sql: |
+    -- Create databases for microservices
+    CREATE DATABASE IF NOT EXISTS `Formation-Service` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE DATABASE IF NOT EXISTS `onsjabbes` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    
+    -- Grant permissions
+    GRANT ALL PRIVILEGES ON `Formation-Service`.* TO 'root'@'%';
+    GRANT ALL PRIVILEGES ON `onsjabbes`.* TO 'root'@'%';
+    FLUSH PRIVILEGES;
+    
+    -- Log initialization
+    SELECT 'MySQL databases initialized successfully' AS Status;
