@@ -2,6 +2,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
+  labels:
+    app: frontend
+    tier: frontend
 spec:
   replicas: 2
   selector:
@@ -11,21 +14,73 @@ spec:
     metadata:
       labels:
         app: frontend
+        tier: frontend
     spec:
       containers:
         - name: frontend
-          image: mariem360/portfolio-app-cicd-pipeline-frontend:1.0.0-10
+          image: rimzoghlami/cicd-pipeline-frontend:latest
           ports:
             - containerPort: 80
+              name: http-port
+          env:
+            - name: BACKEND_API_URL
+              value: "http://formation-service:9094/Formation-Service"
+            - name: AUTH_API_URL
+              value: "http://user-service:8089/tests"
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 10
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
+  labels:
+    app: frontend
+    tier: frontend
 spec:
   selector:
     app: frontend
   ports:
     - port: 80
       targetPort: 80
+      name: http-port
   type: LoadBalancer
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  labels:
+    app: frontend
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "false"
+spec:
+  rules:
+    - host: formation-app.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend-service
+                port:
+                  number: 80
