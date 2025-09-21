@@ -2,9 +2,6 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: formation-service
-  labels:
-    app: formation-service
-    tier: backend
 spec:
   replicas: 2
   selector:
@@ -14,17 +11,13 @@ spec:
     metadata:
       labels:
         app: formation-service
-        tier: backend
     spec:
       containers:
         - name: formation-service
           image: rimzoghlami/cicd-pipeline-formation-service:latest
           ports:
             - containerPort: 9094
-              name: http-port
           env:
-            - name: SPRING_PROFILES_ACTIVE
-              value: "kubernetes"
             - name: SPRING_DATASOURCE_URL
               value: "jdbc:mysql://mysql:3306/Formation-Service?createDatabaseIfNotExist=true"
             - name: SPRING_DATASOURCE_USERNAME
@@ -33,53 +26,15 @@ spec:
               value: ""
             - name: EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE
               value: "http://eureka-server:8761/eureka"
-            - name: EUREKA_INSTANCE_HOSTNAME
-              value: "formation-service"
-            - name: EUREKA_INSTANCE_PREFER_IP_ADDRESS
-              value: "true"
-            - name: SERVER_SERVLET_CONTEXT_PATH
-              value: "/Formation-Service"
-          resources:
-            requests:
-              memory: "512Mi"
-              cpu: "250m"
-            limits:
-              memory: "1Gi"
-              cpu: "500m"
-          readinessProbe:
-            httpGet:
-              path: /Formation-Service/actuator/health
-              port: 9094
-            initialDelaySeconds: 60
-            periodSeconds: 10
-            timeoutSeconds: 5
-          livenessProbe:
-            httpGet:
-              path: /Formation-Service/actuator/health
-              port: 9094
-            initialDelaySeconds: 120
-            periodSeconds: 30
-            timeoutSeconds: 10
-      initContainers:
-        - name: wait-for-mysql
-          image: busybox:1.35
-          command: ['sh', '-c', 'until nc -z mysql 3306; do echo waiting for mysql; sleep 5; done;']
-        - name: wait-for-eureka
-          image: busybox:1.35
-          command: ['sh', '-c', 'until nc -z eureka-server 8761; do echo waiting for eureka; sleep 10; done;']
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: formation-service
-  labels:
-    app: formation-service
-    tier: backend
 spec:
   selector:
     app: formation-service
   ports:
     - port: 9094
       targetPort: 9094
-      name: http-port
   type: ClusterIP
